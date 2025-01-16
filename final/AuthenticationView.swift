@@ -189,6 +189,4 @@ struct AuthenticationView: View {
             }
         }
     }
-
-
 }

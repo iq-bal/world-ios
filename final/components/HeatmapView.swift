@@ -7,49 +7,160 @@
 
 import SwiftUI
 
-
-
 struct HeatmapView: View {
     let solvedDates: Set<Date>
-
+    private let cellSize: CGFloat = 8
+    private let spacing: CGFloat = 2
+    private let monthLabelHeight: CGFloat = 20
+    
     var body: some View {
-        let calendar = Calendar.current
-        let yearStart = calendar.date(from: DateComponents(year: calendar.component(.year, from: Date()), month: 1, day: 1))!
-        let allDates = (0..<365).compactMap { calendar.date(byAdding: .day, value: $0, to: yearStart) }
-        let columns = 27 // 27 columns (14 rows * 27 columns = 378 slots, sufficient for 365 days)
-        let rows = 14 // Adjusted to 14 rows for better screen fit
-
-        let grid = generateGrid(from: allDates, rows: rows, columns: columns)
-
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(0..<rows, id: \.self) { row in
-                HStack(spacing: 2) {
-                    ForEach(0..<columns, id: \.self) { col in
-                        if let date = grid[row][col] {
-                            Circle()
-                                .fill(solvedDates.contains(date) ? Color.green : Color.gray.opacity(0.2))
-                                .frame(width: 10, height: 10)
-                        } else {
-                            Circle()
-                                .fill(Color.clear)
-                                .frame(width: 10, height: 10)
+        VStack(alignment: .leading, spacing: 0) {
+            // Month labels
+            MonthLabels()
+                .frame(height: monthLabelHeight)
+                .padding(.leading, 20)
+            
+            HStack(alignment: .top, spacing: spacing) {
+                // Day labels
+                DayLabels(cellSize: cellSize)
+                    .padding(.top, spacing)
+                
+                // Grid
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: spacing) {
+                        ForEach(getWeeks().reversed(), id: \.startDate) { week in
+                            WeekColumn(week: week, solvedDates: solvedDates, cellSize: cellSize)
                         }
                     }
+                    .padding(.vertical, spacing)
                 }
+                .padding(.trailing, AppSpacing.md)
             }
         }
-        .padding(.horizontal)
     }
-
-    private func generateGrid(from dates: [Date], rows: Int, columns: Int) -> [[Date?]] {
-        var grid = Array(repeating: Array(repeating: nil as Date?, count: columns), count: rows)
-        for (index, date) in dates.enumerated() {
-            let row = index % rows
-            let column = index / rows
-            if column < columns {
-                grid[row][column] = date
+    
+    private func getWeeks() -> [Week] {
+        let calendar = Calendar.current
+        let endDate = calendar.startOfDay(for: Date())
+        let startDate = calendar.date(byAdding: .day, value: -364, to: endDate)! // -364 to include today
+        
+        var weeks: [Week] = []
+        var currentDate = startDate
+        
+        while currentDate <= endDate {
+            let weekDates = (0..<7).compactMap { dayOffset in
+                let date = calendar.date(byAdding: .day, value: dayOffset, to: currentDate)
+                return date?.timeIntervalSince1970 ?? 0 <= endDate.timeIntervalSince1970 ? date : nil
+            }.compactMap { $0 } // Remove nil values
+            
+            if !weekDates.isEmpty {
+                weeks.append(Week(dates: weekDates, startDate: currentDate))
+            }
+            
+            if let nextWeek = calendar.date(byAdding: .day, value: 7, to: currentDate),
+               nextWeek <= endDate {
+                currentDate = nextWeek
+            } else {
+                break
             }
         }
-        return grid
+        
+        return weeks
+    }
+}
+
+struct Week {
+    let dates: [Date]
+    let startDate: Date
+}
+
+struct WeekColumn: View {
+    let week: Week
+    let solvedDates: Set<Date>
+    let cellSize: CGFloat
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            ForEach(week.dates.reversed(), id: \.self) { date in
+                ContributionCell(date: date, solvedDates: solvedDates)
+                    .frame(width: cellSize, height: cellSize)
+            }
+        }
+    }
+}
+
+struct ContributionCell: View {
+    let date: Date
+    let solvedDates: Set<Date>
+    
+    var body: some View {
+        let count = getContributionCount(for: date)
+        RoundedRectangle(cornerRadius: 1)
+            .fill(colorForContributions(count))
+    }
+    
+    private func getContributionCount(for date: Date) -> Int {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        return solvedDates.contains(startOfDay) ? 1 : 0
+    }
+    
+    private func colorForContributions(_ count: Int) -> Color {
+        if count > 0 {
+            return Color(red: 64/255, green: 196/255, blue: 99/255)
+        }
+        return Color(red: 235/255, green: 237/255, blue: 240/255)
+    }
+}
+
+struct MonthLabels: View {
+    var body: some View {
+        HStack(spacing: 20) {
+            ForEach(getMonthLabels(), id: \.self) { month in
+                Text(month)
+                    .font(.system(size: 8))
+                    .foregroundColor(.gray)
+            }
+        }
+    }
+    
+    private func getMonthLabels() -> [String] {
+        let months = Calendar.current.shortMonthSymbols
+        let currentMonth = Calendar.current.component(.month, from: Date())
+        var orderedMonths: [String] = []
+        
+        for i in (0..<12).reversed() {
+            let index = (currentMonth - i - 1 + 12) % 12
+            orderedMonths.append(months[index])
+        }
+        
+        return orderedMonths.reversed()
+    }
+}
+
+struct DayLabels: View {
+    let days = ["", "Mon", "", "Wed", "", "Fri", ""]
+    let cellSize: CGFloat
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(days, id: \.self) { day in
+                Text(day)
+                    .font(.system(size: 8))
+                    .foregroundColor(.gray)
+                    .frame(width: 20, alignment: .leading)
+                    .frame(height: cellSize + 2)
+            }
+        }
+        .padding(.top, 2)
+    }
+}
+
+// Preview
+struct HeatmapView_Previews: PreviewProvider {
+    static var previews: some View {
+        HeatmapView(solvedDates: Set([Date(), Date().addingTimeInterval(-86400)]))
+            .frame(height: 200)
+            .padding()
     }
 }

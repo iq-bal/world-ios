@@ -10,43 +10,56 @@ import SwiftUI
 import Charts
 
 struct RatingGraphView: View {
-    let ratingHistory: [(Date, Int)] // Array of (Date, Rating) tuples
-
-    var body: some View {
-        VStack {
-            Text("Rating Progress")
-                .font(.headline)
-                .padding(.bottom, 10)
-
-            Chart {
-                ForEach(ratingHistory, id: \.0) { entry in
-                    LineMark(
-                        x: .value("Date", entry.0),
-                        y: .value("Rating", entry.1)
-                    )
-                    .foregroundStyle(.blue)
-                    .interpolationMethod(.catmullRom)
-
-                    PointMark(
-                        x: .value("Date", entry.0),
-                        y: .value("Rating", entry.1)
-                    )
-                    .foregroundStyle(.yellow)
-                }
-            }
-            .chartXAxis {
-                AxisMarks(preset: .aligned, values: .stride(by: .month)) {
-                    AxisValueLabel(format: .dateTime.month(.abbreviated))
-                }
-            }
-            .chartYAxis {
-                AxisMarks { value in
-                    AxisValueLabel() // Display the rating values
-                }
-            }
-            .frame(height: 300)
+    let ratingHistory: [(Date, Int)]
+    
+    private var yAxisValues: [Int] {
+        guard let minRating = ratingHistory.map({ $0.1 }).min(),
+              let maxRating = ratingHistory.map({ $0.1 }).max() else {
+            return [800, 900, 1000, 1100, 1200] // Default values
         }
-        .padding()
+        
+        let step = 100
+        let minValue = (minRating / step) * step // Round down to nearest hundred
+        let maxValue = ((maxRating + step) / step) * step // Round up to nearest hundred
+        
+        return stride(from: minValue, through: maxValue, by: step).map { $0 }
+    }
+    
+    var body: some View {
+        Chart {
+            ForEach(ratingHistory, id: \.0) { entry in
+                LineMark(
+                    x: .value("Date", entry.0),
+                    y: .value("Rating", entry.1)
+                )
+                .foregroundStyle(AppColors.primary.gradient)
+                .interpolationMethod(.catmullRom)
+                
+                PointMark(
+                    x: .value("Date", entry.0),
+                    y: .value("Rating", entry.1)
+                )
+                .foregroundStyle(AppColors.accent)
+                .symbolSize(50)
+            }
+        }
+        .chartXAxis {
+            AxisMarks(preset: .aligned, values: .stride(by: .month)) { value in
+                AxisValueLabel(format: .dateTime.month(.abbreviated))
+                    .foregroundStyle(AppColors.textSecondary)
+            }
+        }
+        .chartYAxis {
+            AxisMarks(preset: .aligned, values: yAxisValues.map { Double($0) }) { value in
+                AxisValueLabel {
+                    Text("\(value.index)")
+                        .foregroundColor(AppColors.textSecondary)
+                        .font(.system(size: 10))
+                }
+                AxisGridLine()
+            }
+        }
+        .padding(.vertical, AppSpacing.md)
     }
 }
 
